@@ -10,11 +10,15 @@ A macOS menu bar app that lets teammates on the same Wi-Fi see each other's lapt
 
 ## Screenshots
 
-<p align="center">
+<p>
   <img src="assets/screenshots/dropdown.png" width="320" alt="Menu bar dropdown showing teammates' battery levels" />
   &nbsp;&nbsp;
+</p>
+<p>
   <img src="assets/screenshots/notch.png" width="320" alt="Notch-style battery alert" />
   &nbsp;&nbsp;
+</p>
+<p>
   <img src="assets/screenshots/settings.png" width="320" alt="Settings window" />
 </p>
 
