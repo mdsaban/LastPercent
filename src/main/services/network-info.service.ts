@@ -31,13 +31,13 @@ export async function detectNetworkName(): Promise<void> {
       return;
     }
 
-    // macOS 15 removed the airport binary so systeminformation falls back to CoreWLAN
-    // which returns '<redacted>' without Location Services. Use networksetup instead —
-    // it reads from System Configuration framework and needs no extra permissions.
-    const redactedWifi = wifiList.find((w) => w.ssid === '<redacted>');
-    if (redactedWifi) {
-      const wifiIface = ifaceArray.find((i) => i.type === 'wireless' && !i.virtual && i.ip4);
-      const ssid = wifiIface ? await getSsidViaNetworkSetup(wifiIface.iface) : null;
+    // macOS 15 removed the airport binary so systeminformation falls back to CoreWLAN,
+    // which either returns '<redacted>' or an empty list without Location Services.
+    // Use networksetup instead — it reads from System Configuration and needs no permissions.
+    const wifiIface = ifaceArray.find((i) => i.type === 'wireless' && !i.virtual && i.ip4);
+    const hasRedacted = wifiList.some((w) => w.ssid === '<redacted>');
+    if (wifiIface && (hasRedacted || wifiList.length === 0)) {
+      const ssid = await getSsidViaNetworkSetup(wifiIface.iface);
       stateStore.setNetworkName(ssid, !ssid);
       return;
     }

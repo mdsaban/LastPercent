@@ -1,10 +1,21 @@
 import dgram from 'dgram';
+import os from 'os';
 import { stateStore } from '../services/state.store';
 import { MULTICAST_ADDR, MULTICAST_PORT, HEARTBEAT_INTERVAL_MS, APP_VERSION } from '../../shared/constants';
 import { parseMessage } from './protocol';
 import type { Heartbeat } from './protocol';
 import type { ChargerRequest } from './protocol';
 import type { PersistenceService } from '../services/persistence.service';
+
+// Returns all active non-loopback IPv4 interface addresses.
+// We join the multicast group on each so the app works regardless of
+// which adapter (Wi-Fi, Ethernet, hotspot) is active.
+function getLanIps(): string[] {
+  return Object.values(os.networkInterfaces())
+    .flat()
+    .filter((a): a is os.NetworkInterfaceInfo => !!a && a.family === 'IPv4' && !a.internal)
+    .map((a) => a.address);
+}
 
 export class GossipService {
   private socket: dgram.Socket | null = null;
@@ -19,14 +30,24 @@ export class GossipService {
     this.socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
 
     this.socket.bind(MULTICAST_PORT, () => {
-      try {
-        this.socket?.addMembership(MULTICAST_ADDR);
-      } catch (err) {
-        console.error('[Gossip] addMembership failed — multicast may be blocked:', (err as Error).message);
+      const ips = getLanIps();
+      console.log('[Gossip] Local interfaces:', ips.join(', ') || 'none');
+
+      for (const ip of ips) {
+        try {
+          this.socket?.addMembership(MULTICAST_ADDR, ip);
+        } catch (err) {
+          console.error(`[Gossip] addMembership failed on ${ip}:`, (err as Error).message);
+        }
       }
+
+      // Send multicast out through the first available interface.
+      // Without this, macOS picks the default route which may be a VPN or loopback.
+      if (ips[0]) this.socket?.setMulticastInterface(ips[0]);
+
       this.socket?.setMulticastTTL(128);
       this.socket?.setMulticastLoopback(false);
-      console.log('[Gossip] Joined multicast group', MULTICAST_ADDR);
+      console.log('[Gossip] Joined multicast group', MULTICAST_ADDR, 'on', ips.length, 'interface(s)');
     });
 
     this.socket.on('message', (buf, rinfo) => {
