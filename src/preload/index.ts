@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { ElectronAPI, AppState, AppAlert, UserPrefs, NotchPayload } from '../shared/types';
+import type { ElectronAPI, AppState, AppAlert, UserPrefs, NotchPayload, UpdateStatus } from '../shared/types';
 
 const api: ElectronAPI = {
   getState: () => ipcRenderer.invoke('get-state'),
@@ -30,7 +30,7 @@ const api: ElectronAPI = {
   },
 
   onUpdateState: (callback) => {
-    const listener = (_: unknown, state: unknown) => callback(state);
+    const listener = (_: unknown, state: UpdateStatus) => callback(state);
     ipcRenderer.on('update-state', listener);
     return () => ipcRenderer.off('update-state', listener);
   },
