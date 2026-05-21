@@ -3,6 +3,8 @@ import { Toggle } from '../components/Toggle';
 import { EmojiPicker } from '../components/EmojiPicker';
 import type { UserPrefs } from '../../shared/types';
 
+declare const __APP_VERSION__: string;
+
 const GITHUB_URL = 'https://github.com/mdsaban/lastpercent';
 
 export function Settings() {
@@ -132,7 +134,7 @@ export function Settings() {
 
       <Section title="About">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-          <span>LastPercent 0.1.0</span>
+          <span>LastPercent {__APP_VERSION__}</span>
           <span>·</span>
           <span>MIT License</span>
           <span>·</span>
