@@ -58,10 +58,7 @@ app.whenReady().then(async () => {
       if (bounds) dropdown.toggle(bounds);
     },
     onQuitAndInstall: () => updater.quitAndInstall(),
-    onCheckForUpdates: () => {
-      updater.check();
-      updater.openReleasesPage();
-    },
+    onCheckForUpdates: () => updater.check(),
   });
   tray.create();
 
@@ -116,6 +113,18 @@ app.whenReady().then(async () => {
     await battery.forcePoll();
     gossip.restart();
     detectNetworkName();
+  });
+
+  // Broadcast immediately when charger is plugged/unplugged so peers see
+  // the charging state change without waiting for the next 10s heartbeat.
+  powerMonitor.on('on-ac', async () => {
+    await battery.forcePoll();
+    gossip.broadcastNow();
+  });
+
+  powerMonitor.on('on-battery', async () => {
+    await battery.forcePoll();
+    gossip.broadcastNow();
   });
 });
 

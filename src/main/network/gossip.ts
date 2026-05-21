@@ -58,7 +58,10 @@ export class GossipService {
       console.error('[Gossip] socket error:', err.message);
     });
 
-    setTimeout(() => this.broadcast(), 1_000);
+    // Burst on startup so peers appear quickly regardless of when they launched
+    setTimeout(() => this.broadcast(), 500);
+    setTimeout(() => this.broadcast(), 2_000);
+    setTimeout(() => this.broadcast(), 5_000);
     this.timer = setInterval(() => this.broadcast(), HEARTBEAT_INTERVAL_MS);
 
     console.log('[Gossip] Started (UDP broadcast) on port', MULTICAST_PORT);
