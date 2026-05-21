@@ -27,9 +27,11 @@ export async function detectNetworkName(): Promise<void> {
     // prefer Wi-Fi SSID from systeminformation
     const connectedWifi = wifiList.find((w) => w.ssid && w.ssid !== '<redacted>');
     if (connectedWifi?.ssid) {
+      console.log('[Network] SSID from si.wifiConnections:', connectedWifi.ssid);
       stateStore.setNetworkName(connectedWifi.ssid);
       return;
     }
+    console.log('[Network] wifiList:', JSON.stringify(wifiList.map(w => w.ssid)));
 
     // macOS 15 removed the airport binary so systeminformation falls back to CoreWLAN,
     // which either returns '<redacted>' or an empty list without Location Services.
