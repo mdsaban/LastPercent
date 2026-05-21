@@ -45,9 +45,6 @@ app.whenReady().then(async () => {
   updater = new UpdaterService((state) => {
     tray.setUpdateState(state);
     dropdown.sendUpdateState(state);
-    // If auto-update fails (e.g. unsigned build), open the releases page so
-    // the user can still download the new version manually.
-    if (state.status === 'error') updater.openReleasesPage();
   });
 
   registerHandlers({ persistence, battery, gossip, updater });
@@ -63,7 +60,12 @@ app.whenReady().then(async () => {
       if (bounds) dropdown.toggle(bounds);
     },
     onQuitAndInstall: () => updater.quitAndInstall(),
-    onCheckForUpdates: () => updater.check(),
+    onCheckForUpdates: () => {
+      // If an update is already known, go straight to the release page.
+      // Otherwise trigger a fresh check — if one is found the tray updates.
+      updater.openReleasesPage();
+      updater.check();
+    },
   });
   tray.create();
 

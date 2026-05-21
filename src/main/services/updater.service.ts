@@ -1,58 +1,46 @@
 import { autoUpdater, UpdateInfo } from 'electron-updater';
 import { shell } from 'electron';
 
-const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 export type UpdateState =
   | { status: 'idle' }
   | { status: 'available'; version: string }
-  | { status: 'downloading'; percent: number }
-  | { status: 'ready'; version: string }
   | { status: 'error'; message: string };
 
 export class UpdaterService {
   private onStateChange: (state: UpdateState) => void;
   private checkTimer: NodeJS.Timeout | null = null;
+  private availableVersion: string | null = null;
 
   constructor(onStateChange: (state: UpdateState) => void) {
     this.onStateChange = onStateChange;
   }
 
   start() {
-    // download silently, install automatically when the user next quits
-    autoUpdater.autoDownload = true;
-    autoUpdater.autoInstallOnAppQuit = true;
+    // Don't download — Squirrel.Mac rejects unsigned builds at install time.
+    // We only use electron-updater to check the latest version number.
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = false;
     autoUpdater.allowPrerelease = false;
 
     autoUpdater.on('update-available', (info: UpdateInfo) => {
       console.log('[Updater] Update available:', info.version);
+      this.availableVersion = info.version;
       this.onStateChange({ status: 'available', version: info.version });
     });
 
-    autoUpdater.on('download-progress', (progress) => {
-      this.onStateChange({ status: 'downloading', percent: Math.round(progress.percent) });
-    });
-
-    autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
-      console.log('[Updater] Ready to install:', info.version);
-      this.onStateChange({ status: 'ready', version: info.version });
-    });
-
     autoUpdater.on('update-not-available', () => {
+      this.availableVersion = null;
       this.onStateChange({ status: 'idle' });
     });
 
     autoUpdater.on('error', (err) => {
-      const msg = err.message ?? String(err);
-      console.error('[Updater] Error:', msg);
-      // Propagate so callers can fall back to the GitHub releases page
-      this.onStateChange({ status: 'error', message: msg });
+      // Fail silently — usually offline or GitHub rate-limited
+      console.log('[Updater] Check failed:', err.message);
     });
 
-    // check on launch after a short delay (don't block startup)
     setTimeout(() => this.check(), 10_000);
-
-    // then every 4 hours
     this.checkTimer = setInterval(() => this.check(), CHECK_INTERVAL_MS);
   }
 
@@ -61,18 +49,19 @@ export class UpdaterService {
   }
 
   check() {
-    autoUpdater.checkForUpdates().catch(() => {
-      // network may be offline — fail silently
-    });
+    autoUpdater.checkForUpdates().catch(() => {});
   }
 
-  /** Install immediately (called from tray "Restart to Update" menu item). */
-  quitAndInstall() {
-    autoUpdater.quitAndInstall(false, true);
-  }
-
-  /** Fallback for unsigned builds — opens the GitHub releases page. */
+  /** Open the GitHub release page for the available version (or the releases list). */
   openReleasesPage() {
-    shell.openExternal('https://github.com/mdsaban/lastpercent/releases');
+    const url = this.availableVersion
+      ? `https://github.com/mdsaban/lastpercent/releases/tag/v${this.availableVersion}`
+      : 'https://github.com/mdsaban/lastpercent/releases';
+    shell.openExternal(url);
+  }
+
+  /** No-op — kept for API compatibility; install is handled via openReleasesPage. */
+  quitAndInstall() {
+    this.openReleasesPage();
   }
 }

@@ -95,37 +95,27 @@ export function Dropdown() {
 
   return (
     <div style={containerStyle}>
-      {updateState?.status === 'ready' && (
+      {updateState?.status === 'available' && (
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '8px 12px',
-          background: 'var(--charging)',
+          background: 'var(--hover)',
           borderRadius: '12px 12px 0 0',
           gap: 8,
         }}>
-          <span style={{ fontSize: 12, fontWeight: 500, color: '#fff' }}>
-            Update ready — v{updateState.version}
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            v{updateState.version} available
           </span>
           <button
-            onClick={() => window.electron.installUpdate()}
+            onClick={() => window.electron.openExternal(`https://github.com/mdsaban/lastpercent/releases/tag/v${updateState.version}`)}
             style={{
-              fontSize: 11, fontWeight: 600, color: 'var(--charging)',
-              background: '#fff', padding: '3px 10px',
+              fontSize: 11, fontWeight: 600, color: '#fff',
+              background: 'var(--charging)', padding: '3px 10px',
               borderRadius: 6, cursor: 'pointer', whiteSpace: 'nowrap',
             }}
           >
-            Restart & Install
+            Download
           </button>
-        </div>
-      )}
-      {updateState?.status === 'downloading' && (
-        <div style={{
-          padding: '6px 12px',
-          background: 'var(--hover)',
-          borderRadius: '12px 12px 0 0',
-          fontSize: 12, color: 'var(--text-muted)',
-        }}>
-          Downloading update… {updateState.percent}%
         </div>
       )}
       <div style={headerStyle}>

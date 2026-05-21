@@ -30,7 +30,7 @@ export class TrayManager {
 
     stateStore.on('updated', (state) => {
       if (state.self) {
-        const suffix = this.updateState.status === 'ready' ? ' · ↑' : '';
+        const suffix = this.updateState.status === 'available' ? ' · ↑' : '';
         this.tray?.setToolTip(`LastPercent · ${state.self.battery}%${suffix}`);
       }
     });
@@ -42,10 +42,9 @@ export class TrayManager {
 
   setUpdateState(state: UpdateState) {
     this.updateState = state;
-    if (state.status === 'ready') {
-      // Dot on the tray title draws the eye without being intrusive
+    if (state.status === 'available') {
       this.tray?.setTitle('⚡ ·');
-      this.tray?.setToolTip(`LastPercent · Update ready (v${state.version}) — right-click to install`);
+      this.tray?.setToolTip(`LastPercent · Update available (v${state.version}) — right-click to download`);
     } else {
       this.tray?.setTitle('⚡');
     }
@@ -66,31 +65,16 @@ export class TrayManager {
   }
 
   private buildUpdateMenuItems(): Electron.MenuItemConstructorOptions[] {
-    switch (this.updateState.status) {
-      case 'ready':
-        return [{
-          label: `Restart to Update (v${this.updateState.version})`,
-          click: () => this.onQuitAndInstall(),
-        }];
-
-      case 'downloading':
-        return [{
-          label: `Downloading update… ${this.updateState.percent}%`,
-          enabled: false,
-        }];
-
-      case 'available':
-        return [{
-          label: `Update available (v${this.updateState.version})`,
-          enabled: false,
-        }];
-
-      default:
-        return [{
-          label: 'Check for Updates',
-          click: () => this.onCheckForUpdates(),
-        }];
+    if (this.updateState.status === 'available') {
+      return [{
+        label: `Update available (v${this.updateState.version}) — click to download`,
+        click: () => this.onCheckForUpdates(),
+      }];
     }
+    return [{
+      label: 'Check for Updates',
+      click: () => this.onCheckForUpdates(),
+    }];
   }
 
   destroy() {

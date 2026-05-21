@@ -50,8 +50,6 @@ export type NotchPayload =
 export type UpdateStatus =
   | { status: 'idle' }
   | { status: 'available'; version: string }
-  | { status: 'downloading'; percent: number }
-  | { status: 'ready'; version: string }
   | { status: 'error'; message: string };
 
 export interface ElectronAPI {
