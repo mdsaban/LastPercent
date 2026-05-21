@@ -27,7 +27,7 @@ export class PersistenceService {
       name: 'config',
       defaults: {
         peerId: randomUUID(),
-        displayName: os.userInfo().username || 'Teammate',
+        displayName: [os.userInfo().username, process.env.USER].find(n => n && n !== '<redacted>') ?? 'Teammate',
         emoji: EMOJI_DEFAULTS[Math.floor(Math.random() * EMOJI_DEFAULTS.length)],
         isVisible: true,
         launchAtLogin: false,

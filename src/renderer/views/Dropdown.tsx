@@ -169,6 +169,14 @@ export function Dropdown() {
           {state.peers.length > 0
             ? `${state.peers.length} nearby${state.networkName ? ` · ${state.networkName}` : ''}`
             : (state.networkName ?? 'no one nearby')}
+          {state.networkNameUnavailable && (
+            <span
+              style={{ color: 'var(--text-muted)', marginLeft: 4, cursor: 'default' }}
+              title="Network name unavailable — go to System Settings → Privacy & Security → Location Services and enable it for LastPercent"
+            >
+              · Network name unavailable ⓘ
+            </span>
+          )}
         </span>
         {state.status === 'discovering' && (
           <span style={{ color: 'var(--text-muted)' }}>looking…</span>

@@ -17,6 +17,7 @@ export class StateStore extends EventEmitter {
   private peers = new Map<string, PeerState>();
   private selfId: string | null = null;
   private networkName: string | null = null;
+  private networkNameUnavailable = false;
   private pruneTimer: NodeJS.Timeout | null = null;
   private selfLowBatteryNotified = false;
   private highBatteryThreshold = 85;
@@ -36,8 +37,9 @@ export class StateStore extends EventEmitter {
     this.highBatteryThreshold = threshold;
   }
 
-  setNetworkName(name: string | null) {
+  setNetworkName(name: string | null, unavailable = false) {
     this.networkName = name;
+    this.networkNameUnavailable = unavailable;
     this.emit('updated', this.getAppState());
   }
 
@@ -106,7 +108,7 @@ export class StateStore extends EventEmitter {
     if (peers.length > 0) status = 'connected';
     else if (self) status = 'no-peers';
 
-    return { self, peers, networkName: this.networkName, status };
+    return { self, peers, networkName: this.networkName, networkNameUnavailable: this.networkNameUnavailable, status };
   }
 
   private prune() {

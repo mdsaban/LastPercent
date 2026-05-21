@@ -19,6 +19,7 @@ export interface AppState {
   self: PeerState | null;
   peers: PeerState[];
   networkName: string | null;
+  networkNameUnavailable: boolean;
   status: AppStatus;
 }
 

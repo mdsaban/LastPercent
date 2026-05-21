@@ -16,6 +16,9 @@ mac:
   gatekeeperAssess: false
   extendInfo:
     LSUIElement: true
+    NSLocalNetworkUsageDescription: "LastPercent needs local network access to discover nearby teammates' battery levels."
+    NSBonjourServices:
+      - _lastpercent._udp
 
 files:
   - out/**/*

@@ -19,14 +19,23 @@ export class GossipService {
     this.socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
 
     this.socket.bind(MULTICAST_PORT, () => {
-      this.socket?.addMembership(MULTICAST_ADDR);
+      try {
+        this.socket?.addMembership(MULTICAST_ADDR);
+      } catch (err) {
+        console.error('[Gossip] addMembership failed — multicast may be blocked:', (err as Error).message);
+      }
       this.socket?.setMulticastTTL(128);
       this.socket?.setMulticastLoopback(false);
+      console.log('[Gossip] Joined multicast group', MULTICAST_ADDR);
     });
 
-    this.socket.on('message', (buf) => {
-      const msg = parseMessage(buf.toString('utf8'));
-      if (!msg) return;
+    this.socket.on('message', (buf, rinfo) => {
+      const raw = buf.toString('utf8');
+      const msg = parseMessage(raw);
+      if (!msg) {
+        console.warn('[Gossip] Received unparseable packet from', rinfo.address, raw.slice(0, 80));
+        return;
+      }
       if (msg.type === 'heartbeat') this.handleHeartbeat(msg);
       if (msg.type === 'goodbye') stateStore.removePeer(msg.peerId);
       if (msg.type === 'charger_request') this.handleChargerRequest(msg);
@@ -105,7 +114,9 @@ export class GossipService {
       console.warn('[Gossip] payload exceeds safe UDP size:', buf.length, 'bytes — dropping');
       return;
     }
-    this.socket.send(buf, MULTICAST_PORT, MULTICAST_ADDR);
+    this.socket.send(buf, MULTICAST_PORT, MULTICAST_ADDR, (err) => {
+      if (err) console.error('[Gossip] send error:', err.message);
+    });
   }
 
   private handleChargerRequest(msg: ChargerRequest) {
@@ -115,6 +126,8 @@ export class GossipService {
 
   private handleHeartbeat(msg: Heartbeat) {
     if (msg.peerId === this.persistence.get('peerId')) return;
+
+    console.log('[Gossip] Heartbeat from', msg.displayName, `(${msg.peerId.slice(0, 8)}…) battery=${msg.battery}%`);
 
     stateStore.updatePeer({
       peerId: msg.peerId,
