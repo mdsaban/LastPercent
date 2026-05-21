@@ -10,10 +10,24 @@
  */
 
 const dgram = require('dgram');
+const os = require('os');
 const { randomUUID } = require('crypto');
 
-const MULTICAST_ADDR = '239.255.42.99';
-const MULTICAST_PORT = 41234;
+const PORT = 41234;
+
+function getBroadcastAddresses() {
+  const result = [];
+  for (const iface of Object.values(os.networkInterfaces())) {
+    for (const addr of iface ?? []) {
+      if (addr.family !== 'IPv4' || addr.internal) continue;
+      const ip = addr.address.split('.').map(Number);
+      const mask = addr.netmask.split('.').map(Number);
+      const bcast = ip.map((b, i) => (b | (~mask[i] & 0xff))).join('.');
+      if (!result.includes(bcast)) result.push(bcast);
+    }
+  }
+  return result;
+}
 
 // ── Parse CLI flags ──────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -48,11 +62,12 @@ const peers = Array.from({ length: COUNT }, (_, i) => {
 const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
 
 function broadcast() {
+  const targets = getBroadcastAddresses();
   for (const peer of peers) {
     if (peer.isCharging && peer.battery < 100) peer.battery = Math.min(100, peer.battery + 2);
     if (!peer.isCharging && peer.battery > 0)  peer.battery = Math.max(0,   peer.battery - 1);
 
-    const msg = JSON.stringify({
+    const msg = Buffer.from(JSON.stringify({
       type:          'heartbeat',
       v:             1,
       peerId:        peer.peerId,
@@ -64,12 +79,14 @@ function broadcast() {
       isVisible:     peer.isVisible,
       status:        peer.status,
       lastUpdatedAt: Date.now(),
-      appVersion:    '0.1.6',
-    });
+      appVersion:    '0.1.7',
+    }), 'utf8');
 
-    socket.send(Buffer.from(msg, 'utf8'), MULTICAST_PORT, MULTICAST_ADDR, (err) => {
-      if (err) console.error('[fake-peer] send error:', err.message);
-    });
+    for (const bcast of targets) {
+      socket.send(msg, PORT, bcast, (err) => {
+        if (err) console.error('[fake-peer] send error to', bcast, ':', err.message);
+      });
+    }
 
     const bar = '█'.repeat(Math.floor(peer.battery / 10)) + '░'.repeat(10 - Math.floor(peer.battery / 10));
     console.log(`[fake-peer] ${peer.emoji} ${peer.displayName.padEnd(12)} ${bar} ${String(peer.battery).padStart(3)}% ${peer.isCharging ? '🔌' : '  '} ${peer.isVisible ? '' : '🔒'}`);
@@ -77,8 +94,9 @@ function broadcast() {
 }
 
 socket.bind(0, () => {
-  socket.addMembership(MULTICAST_ADDR);
-  console.log(`\n[fake-peer] ${COUNT} peer(s) → ${MULTICAST_ADDR}:${MULTICAST_PORT} every ${INTERVAL / 1000}s`);
+  socket.setBroadcast(true);
+  const targets = getBroadcastAddresses();
+  console.log(`\n[fake-peer] ${COUNT} peer(s) → broadcast ${targets.join(', ')}:${PORT} every ${INTERVAL / 1000}s`);
   if (flag('high-battery')) console.log('[fake-peer] Starting at 83% charging — watch for high-battery alert at 85%');
   console.log('[fake-peer] Ctrl+C to stop (peers go away after ~90s)\n');
 
