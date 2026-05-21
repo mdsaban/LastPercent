@@ -7,6 +7,7 @@ export const BATTERY_WARN_THRESHOLD = 20;
 export const BATTERY_CRITICAL_THRESHOLD = 10;
 declare const __APP_VERSION__: string;
 export const APP_VERSION = __APP_VERSION__;
+export const BONJOUR_SERVICE_TYPE = 'lastpercent';
 
 export const PASTEL_PALETTE = [
   '#e9d5ff', // purple
