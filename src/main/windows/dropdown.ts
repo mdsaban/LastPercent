@@ -95,8 +95,12 @@ export class DropdownWindow {
 
     this.win.setSize(WINDOW_WIDTH, height);
     this.win.setPosition(x, y);
+    // Join all Spaces momentarily so macOS shows the window on the active
+    // Space instead of switching to the Space where it was last visible.
+    this.win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     this.win.show();
     this.win.focus();
+    this.win.setVisibleOnAllWorkspaces(false);
     this.win.webContents.send('state-update', state);
   }
 
