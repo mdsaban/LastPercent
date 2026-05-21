@@ -1,5 +1,5 @@
 import dgram from 'dgram';
-import Bonjour from 'bonjour-service';
+import { Bonjour } from 'bonjour-service';
 import type { Browser, Service } from 'bonjour-service';
 import { stateStore } from '../services/state.store';
 import { BONJOUR_SERVICE_TYPE, MULTICAST_PORT, HEARTBEAT_INTERVAL_MS, APP_VERSION } from '../../shared/constants';
@@ -59,10 +59,10 @@ export class GossipService {
       const peerId = service.name;
       if (peerId === this.persistence.get('peerId')) return;
 
-      // prefer a routable LAN address; skip loopback and APIPA link-local
+      // prefer a routable IPv4 LAN address; skip loopback, APIPA, and IPv6
       const ip =
-        service.addresses?.find((a) => !a.startsWith('127.') && !a.startsWith('169.254.')) ??
-        service.referer?.address;
+        service.addresses?.find((a) => !a.startsWith('127.') && !a.startsWith('169.254.') && !a.includes(':')) ??
+        (service.referer?.family === 'IPv4' ? service.referer.address : undefined);
 
       if (!ip) {
         console.warn('[Gossip] Discovered peer', peerId.slice(0, 8), 'but no usable IP in response');
