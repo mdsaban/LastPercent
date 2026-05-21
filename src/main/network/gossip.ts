@@ -1,18 +1,24 @@
 import dgram from 'dgram';
-import { Bonjour } from 'bonjour-service';
-import type { Browser, Service } from 'bonjour-service';
+import os from 'os';
 import { stateStore } from '../services/state.store';
-import { BONJOUR_SERVICE_TYPE, MULTICAST_PORT, HEARTBEAT_INTERVAL_MS, APP_VERSION } from '../../shared/constants';
+import { MULTICAST_ADDR, MULTICAST_PORT, HEARTBEAT_INTERVAL_MS, APP_VERSION } from '../../shared/constants';
 import { parseMessage } from './protocol';
 import type { Heartbeat, ChargerRequest } from './protocol';
 import type { PersistenceService } from '../services/persistence.service';
 
+// All active non-loopback IPv4 interface addresses.
+// Joining the multicast group on each ensures the app works regardless of
+// which adapter (Wi-Fi, Ethernet, hotspot) is currently active.
+function getLanIps(): string[] {
+  return Object.values(os.networkInterfaces())
+    .flat()
+    .filter((a): a is os.NetworkInterfaceInfo => !!a && a.family === 'IPv4' && !a.internal)
+    .map((a) => a.address);
+}
+
 export class GossipService {
   private socket: dgram.Socket | null = null;
   private timer: NodeJS.Timeout | null = null;
-  private bonjour: InstanceType<typeof Bonjour> | null = null;
-  private browser: Browser | null = null;
-  private knownPeers = new Map<string, string>(); // peerId → IP
   private persistence: PersistenceService;
 
   constructor(persistence: PersistenceService) {
@@ -20,11 +26,27 @@ export class GossipService {
   }
 
   start() {
-    // UDP socket — bound to all interfaces, receives unicast heartbeats
     this.socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
 
     this.socket.bind(MULTICAST_PORT, () => {
-      console.log('[Gossip] UDP socket ready on port', MULTICAST_PORT);
+      const ips = getLanIps();
+      console.log('[Gossip] Local interfaces:', ips.join(', ') || 'none');
+
+      for (const ip of ips) {
+        try {
+          this.socket?.addMembership(MULTICAST_ADDR, ip);
+        } catch (err) {
+          console.error(`[Gossip] addMembership failed on ${ip}:`, (err as Error).message);
+        }
+      }
+
+      // Send outgoing multicast through the first available LAN interface.
+      // Without this macOS picks the default route which may be a VPN or loopback.
+      if (ips[0]) this.socket?.setMulticastInterface(ips[0]);
+
+      this.socket?.setMulticastTTL(128);
+      this.socket?.setMulticastLoopback(false);
+      console.log('[Gossip] Joined multicast group', MULTICAST_ADDR, 'on', ips.length, 'interface(s)');
     });
 
     this.socket.on('message', (buf, rinfo) => {
@@ -43,47 +65,10 @@ export class GossipService {
       console.error('[Gossip] socket error:', err.message);
     });
 
-    // Announce our presence via mDNS (224.0.0.251:5353 — allowed on virtually all networks)
-    this.bonjour = new Bonjour();
-    this.bonjour.publish({
-      name: this.persistence.get('peerId'),
-      type: BONJOUR_SERVICE_TYPE,
-      port: MULTICAST_PORT,
-      protocol: 'udp',
-    });
-
-    // Discover peers — their IPs are stored for unicast delivery
-    this.browser = this.bonjour.find({ type: BONJOUR_SERVICE_TYPE, protocol: 'udp' });
-
-    this.browser.on('up', (service: Service) => {
-      const peerId = service.name;
-      if (peerId === this.persistence.get('peerId')) return;
-
-      // prefer a routable IPv4 LAN address; skip loopback, APIPA, and IPv6
-      const ip =
-        service.addresses?.find((a) => !a.startsWith('127.') && !a.startsWith('169.254.') && !a.includes(':')) ??
-        (service.referer?.family === 'IPv4' ? service.referer.address : undefined);
-
-      if (!ip) {
-        console.warn('[Gossip] Discovered peer', peerId.slice(0, 8), 'but no usable IP in response');
-        return;
-      }
-
-      console.log('[Gossip] Discovered peer', peerId.slice(0, 8), 'at', ip);
-      this.knownPeers.set(peerId, ip);
-      this.broadcast(); // immediately push our state to the new peer
-    });
-
-    this.browser.on('down', (service: Service) => {
-      console.log('[Gossip] Peer left mDNS', service.name.slice(0, 8));
-      this.knownPeers.delete(service.name);
-      stateStore.removePeer(service.name);
-    });
-
     setTimeout(() => this.broadcast(), 1_000);
     this.timer = setInterval(() => this.broadcast(), HEARTBEAT_INTERVAL_MS);
 
-    console.log('[Gossip] Started (mDNS discovery + unicast UDP)');
+    console.log('[Gossip] Started on', MULTICAST_ADDR, MULTICAST_PORT);
   }
 
   restart() {
@@ -94,24 +79,12 @@ export class GossipService {
   stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-
-    this.browser?.stop();
-    this.browser = null;
-
-    // unpublishAll sends a DNS-SD TTL=0 goodbye so peers' browsers fire 'down'
-    this.bonjour?.unpublishAll();
-    this.bonjour?.destroy();
-    this.bonjour = null;
-
-    this.knownPeers.clear();
-
     try { this.socket?.close(); } catch { /* already closed */ }
     this.socket = null;
   }
 
   sendGoodbye() {
-    const pkt = JSON.stringify({ type: 'goodbye', v: 1, peerId: this.persistence.get('peerId') });
-    this.sendToAll(pkt);
+    this.send(JSON.stringify({ type: 'goodbye', v: 1, peerId: this.persistence.get('peerId') }));
   }
 
   broadcastNow() {
@@ -121,14 +94,12 @@ export class GossipService {
   sendChargerRequest(toPeerId: string) {
     const self = stateStore.getSelf();
     if (!self) return;
-    const ip = this.knownPeers.get(toPeerId);
-    if (!ip) return;
-    this.sendTo(JSON.stringify({
+    this.send(JSON.stringify({
       type: 'charger_request',
       v: 1,
       toPeerId,
       from: { peerId: self.peerId, displayName: self.displayName, emoji: self.emoji, battery: self.battery },
-    }), ip);
+    }));
   }
 
   private broadcast() {
@@ -153,24 +124,18 @@ export class GossipService {
       appVersion: APP_VERSION,
     };
 
-    this.sendToAll(JSON.stringify(heartbeat));
+    this.send(JSON.stringify(heartbeat));
   }
 
-  private sendToAll(payload: string) {
-    for (const ip of this.knownPeers.values()) {
-      this.sendTo(payload, ip);
-    }
-  }
-
-  private sendTo(payload: string, ip: string) {
+  private send(payload: string) {
     if (!this.socket) return;
     const buf = Buffer.from(payload, 'utf8');
     if (buf.length > 1400) {
       console.warn('[Gossip] payload exceeds safe UDP size:', buf.length, 'bytes — dropping');
       return;
     }
-    this.socket.send(buf, MULTICAST_PORT, ip, (err) => {
-      if (err) console.error('[Gossip] send error to', ip, ':', err.message);
+    this.socket.send(buf, MULTICAST_PORT, MULTICAST_ADDR, (err) => {
+      if (err) console.error('[Gossip] send error:', err.message);
     });
   }
 
