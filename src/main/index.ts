@@ -31,7 +31,9 @@ app.whenReady().then(async () => {
   stateStore.start(persistence.get('peerId'));
   stateStore.setHighBatteryThreshold(persistence.get('notifications').highBatteryThreshold);
 
-  battery = new BatteryService(persistence);
+  // Pass a callback so battery service can trigger an immediate broadcast
+  // the moment charging state changes, without waiting for the next heartbeat.
+  battery = new BatteryService(persistence, () => gossip?.broadcastNow());
   gossip = new GossipService(persistence);
 
   dropdown = new DropdownWindow();
@@ -118,17 +120,6 @@ app.whenReady().then(async () => {
     detectNetworkName();
   });
 
-  // Broadcast immediately when charger is plugged/unplugged so peers see
-  // the charging state change without waiting for the next 10s heartbeat.
-  powerMonitor.on('on-ac', async () => {
-    await battery.forcePoll();
-    gossip.broadcastNow();
-  });
-
-  powerMonitor.on('on-battery', async () => {
-    await battery.forcePoll();
-    gossip.broadcastNow();
-  });
 });
 
 app.on('second-instance', () => {

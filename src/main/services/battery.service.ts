@@ -1,26 +1,24 @@
-import { powerMonitor } from 'electron';
 import si from 'systeminformation';
 import { stateStore } from './state.store';
 import { APP_VERSION } from '../../shared/constants';
 import type { PersistenceService } from './persistence.service';
 
+const POLL_INTERVAL_MS = 5_000;
+
 export class BatteryService {
   private pollTimer: NodeJS.Timeout | null = null;
   private persistence: PersistenceService;
+  private onChargingChanged: (() => void) | null = null;
+  private prevIsCharging: boolean | null = null;
 
-  constructor(persistence: PersistenceService) {
+  constructor(persistence: PersistenceService, onChargingChanged?: () => void) {
     this.persistence = persistence;
+    this.onChargingChanged = onChargingChanged ?? null;
   }
 
   async start() {
     await this.poll();
-
-    // 60s baseline poll — coarse enough to not drain battery
-    this.pollTimer = setInterval(() => this.poll(), 60_000);
-
-    // react immediately to power state changes
-    powerMonitor.on('on-ac', () => this.poll());
-    powerMonitor.on('on-battery', () => this.poll());
+    this.pollTimer = setInterval(() => this.poll(), POLL_INTERVAL_MS);
   }
 
   stop() {
@@ -36,16 +34,21 @@ export class BatteryService {
     try {
       const battery = await si.battery();
       const config = this.persistence.getAll();
-
-      // Desktop Macs (Mac mini, iMac) have no battery — treat as always-on
       const noBattery = !battery.hasBattery;
+      const isCharging = noBattery ? false : (battery.isCharging ?? false);
+
+      // Fire callback when charging state flips so gossip broadcasts immediately
+      if (this.prevIsCharging !== null && isCharging !== this.prevIsCharging) {
+        this.onChargingChanged?.();
+      }
+      this.prevIsCharging = isCharging;
 
       stateStore.updatePeer({
         peerId: config.peerId,
         displayName: config.displayName,
         emoji: config.emoji,
         battery: noBattery ? 100 : Math.round(battery.percent ?? 100),
-        isCharging: noBattery ? false : (battery.isCharging ?? false),
+        isCharging,
         isPluggedIn: noBattery ? true : (battery.acConnected ?? false),
         isVisible: config.isVisible,
         status: 'available',
