@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: macos-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed to read git log for release notes
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and publish
+        run: npm run build && npx electron-builder --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Uncomment once you have a code-signing certificate:
+          # CSC_LINK: ${{ secrets.CSC_LINK }}
+          # CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Update release notes
+        run: |
+          VERSION="${{ github.ref_name }}"
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${VERSION}$" | head -1)
+
+          if [ -n "$PREV_TAG" ]; then
+            CHANGES=$(git log ${PREV_TAG}..${VERSION} --pretty=format:"- %s" --no-merges)
+          else
+            CHANGES=$(git log ${VERSION} --pretty=format:"- %s" --no-merges)
+          fi
+
+          gh release edit "${VERSION}" --notes "## What's changed
+
+          ${CHANGES}
+
+          ---
+
+          ### Install
+          - \`LastPercent-*-arm64.dmg\` → M1/M2/M3/M4 Macs
+          - \`LastPercent-*.dmg\` → Intel Macs
+
+          First time? If macOS blocks the app: \`xattr -cr /Applications/LastPercent.app\`"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
