@@ -44,15 +44,8 @@ export class UpdaterService {
 
     autoUpdater.on('error', (err) => {
       const msg = err.message ?? String(err);
-
-      // On unsigned builds macOS blocks the updater — this is expected.
-      // Fall back gracefully: the tray will offer "Check for updates" that opens GitHub.
-      if (msg.includes('Could not get code signature') || msg.includes('ERR_UPDATER')) {
-        console.log('[Updater] Code signing required for auto-update (unsigned build)');
-      } else {
-        console.error('[Updater] Error:', msg);
-      }
-
+      console.error('[Updater] Error:', msg);
+      // Propagate so callers can fall back to the GitHub releases page
       this.onStateChange({ status: 'error', message: msg });
     });
 

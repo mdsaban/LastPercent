@@ -43,6 +43,9 @@ app.whenReady().then(async () => {
   updater = new UpdaterService((state) => {
     tray.setUpdateState(state);
     dropdown.sendUpdateState(state);
+    // If auto-update fails (e.g. unsigned build), open the releases page so
+    // the user can still download the new version manually.
+    if (state.status === 'error') updater.openReleasesPage();
   });
 
   registerHandlers({ persistence, battery, gossip, updater });
